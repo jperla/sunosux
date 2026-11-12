@@ -139,3 +139,9 @@ body.kid .sx-pads.tune { grid-template-columns: repeat(7, 1fr); }
 .sx-meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #3ddc84, #ffd23f 70%, #ff4f4f); }
 .sx-meter.sx-progress i { background: var(--sx-accent); }
 .sx-take { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; border-radius: 14px; background: rgba(255, 255, 255, .07); margin-top: 8px; }
+
+/* song seed */
+.sx-wave { display: block; width: 100%; height: 130px; margin: 8px 0; border-radius: 14px; background: rgba(0, 0, 0, .3); touch-action: none; cursor: ew-resize; }
+.sx-songs { display: grid; gap: 10px; }
+label.sx-btn { display: inline-flex; align-items: center; cursor: pointer; }
+label.sx-btn input[type=file] { display: none; }

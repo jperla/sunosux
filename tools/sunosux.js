@@ -10,6 +10,7 @@ const { spawn } = require('child_process');
 const ROOT = path.resolve(__dirname, '..');
 global.SunosuxInstruments = require('../src/instruments.js');
 const S = require('../src/engine.js');
+const Seed = require('../src/seed.js');
 const rel = (...p) => path.join(ROOT, ...p);
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
@@ -81,6 +82,7 @@ const commands = {
   list                              songs, pieces, instruments, recordings, bricks, interfaces
   new-song <name>                   start an empty song (--bpm 110)
   new-interface <name>              start a page from bricks (--bricks stage,pads,wish --kid --song name)
+  seed <recording> --title "Name"   grow a new song from a bit of singing (--start 2.5 --end 9 --bars 4 --lyrics "…")
   wishes                            show wishes waiting in wishes/inbox.md
   test                              check every song and the hum catcher
 
@@ -191,6 +193,38 @@ ${[...files].map((f) => `<script src="../../${f}"></script>`).join('\n')}
     console.log(`✓ interfaces/${name}/index.html  with bricks: ${wanted.join(', ')}`);
   },
 
+  // Grow a song from a recording. Any audio file works if ffmpeg is installed; WAV always works.
+  seed() {
+    const file = rest[0] || die('give me a recording: node tools/sunosux.js seed singing.wav --title "Our Song"');
+    if (!fs.existsSync(file)) die('no file at ' + file);
+    let wavPath = file;
+    if (path.extname(file).toLowerCase() !== '.wav') {
+      wavPath = rel('out', 'seed-in.wav');
+      fs.mkdirSync(rel('out'), { recursive: true });
+      const r = require('child_process').spawnSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', file, '-ac', '1', '-ar', String(S.SR), wavPath]);
+      if (r.status !== 0) die('could not read that file. Convert it to WAV first (ffmpeg is needed for other formats).');
+    }
+    const buf = fs.readFileSync(wavPath), data = S.decodeWav(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+    const from = +flags.start || 0, to = flags.end ? +flags.end : data.length / S.SR;
+    const piece = data.slice(Math.round(from * S.SR), Math.round(to * S.SR));
+    if (piece.length < S.SR / 2) die('that piece is shorter than half a second');
+    const name = flags.title && flags.title !== true ? flags.title : path.basename(file, path.extname(file));
+    const id = slug(name);
+    if (fs.existsSync(rel('songs', id + '.json')) && !flags.force) die(`songs/${id}.json already exists (pick another --title, or add --force)`);
+    const a = Seed.analyze(piece, { bars: +flags.bars || undefined });
+    const voice = piece.slice();
+    S.polishVoice(voice);
+    fs.writeFileSync(rel('sounds', id + '-hook.wav'), Buffer.from(S.encodeWav({ sampleRate: S.SR, left: voice })));
+    fs.writeFileSync(rel('sounds', id + '-full.wav'), Buffer.from(S.encodeWav({ sampleRate: S.SR, left: data })));
+    const song = Seed.build(a, { title: name, lyrics: flags.lyrics && flags.lyrics !== true ? flags.lyrics : '', sample: id + '-hook', recording: id + '-full', from, to: +to.toFixed(3) });
+    fs.writeFileSync(rel('songs', id + '.json'), JSON.stringify(song, null, 2) + '\n');
+    console.log(`✓ songs/${id}.json grown from ${a.seconds}s of singing`);
+    console.log(`  ${a.bars} bars at ${a.bpm} bpm, key ${a.key}, singer is ${Math.abs(a.tuning)} cents ${a.tuning < 0 ? 'flat' : 'sharp'} (the band follows), pitch found in ${Math.round(a.sung * 100)}% of it`);
+    console.log('  chords: ' + a.chords.join(' | '));
+    console.log('  tune:   ' + a.melody);
+    console.log(`  open http://localhost:4747/interfaces/stage/?song=${id}`);
+  },
+
   wishes() {
     const p = rel('wishes', 'inbox.md');
     console.log(fs.existsSync(p) && fs.readFileSync(p, 'utf8').trim() ? fs.readFileSync(p, 'utf8') : 'no wishes waiting ⭐');
@@ -208,10 +242,28 @@ ${[...files].map((f) => `<script src="../../${f}"></script>`).join('\n')}
     const wav = S.decodeWav(S.encodeWav({ sampleRate: S.SR, left: Float32Array.from(hum), right: Float32Array.from(hum) }));
     if (wav.length !== hum.length) die('WAV round trip changed the length');
     console.log('✓ WAV write and read agree');
+    // a pretend singer: G major tune, 20 cents sharp, 2 bars at 100 bpm
+    const sung = [];
+    let p2 = 0, n2 = 0;
+    for (const [note, beats] of [['G3', 2], ['B3', 1], ['D4', 1], ['C4', 2], ['E4', 1], ['C4', 1]]) {
+      const len = Math.round(beats * 0.6 * S.SR), f0 = S.noteToFreq(note) * Math.pow(2, 20 / 1200);
+      for (let i = 0; i < len; i++, n2++) { p2 += f0 * Math.pow(2, 0.3 * Math.sin(2 * Math.PI * 5.5 * n2 / S.SR) / 12) / S.SR; sung.push(i > len - 1800 ? 0 : Math.min(1, i / 1500) * (0.5 * Math.sin(2 * Math.PI * p2) + 0.25 * Math.sin(4 * Math.PI * p2))); }
+    }
+    const an = Seed.analyze(Float32Array.from(sung));
+    const tuneWant = 'G4 - - - - - - - B4 - - - D5 - - - | C5 - - - - - - - E5 - - - C5 - - -';
+    if (an.bars !== 2 || Math.abs(an.bpm - 100) > 0.5) die(`seed: expected 2 bars at 100 bpm, got ${an.bars} at ${an.bpm}`);
+    if (Math.abs(an.tuning - 20) > 6) die(`seed: expected the singer about 20 cents sharp, got ${an.tuning}`);
+    if (an.melody !== tuneWant) die(`seed: heard "${an.melody}"`);
+    if (an.chords.join(' ') !== 'G C') die(`seed: expected chords G C, got ${an.chords.join(' ')}`);
+    const grown = Seed.build(an, { title: 'T', sample: 'hook' }), problems = checkSong(grown, []);
+    if (problems.length) die('seed: the grown song has mistakes: ' + problems.join('; '));
+    console.log(`✓ song seed: 2 bars at ${an.bpm} bpm, ${an.tuning} cents sharp, chords ${an.chords.join(' ')}, and the grown song checks out`);
   },
 
   dev() { devServer(+flags.port || +process.env.PORT || 4747); },
 };
+
+const H_title = (name) => { try { return loadSong(name).title || name; } catch (e) { return name; } };
 
 function bricks() {
   const out = [];
@@ -277,6 +329,7 @@ function devServer(port) {
           req.on('close', () => clients.delete(res));
           return;
         }
+        if (url.pathname === '/api/songs') return end(200, JSON.stringify(listSongs().map((name) => ({ name, title: H_title(name) }))), { 'content-type': 'application/json' });
         if (req.method !== 'GET' && req.headers['x-sunosux'] !== '1') return end(403, 'missing header');
         if (url.pathname === '/api/file' && req.method === 'PUT') {
           const p = url.searchParams.get('path') || '';

@@ -17,7 +17,11 @@
       h('label', { class: 'sx-row' }, tempoLabel, tempo)));
     const draw = () => {
       title.textContent = (store.song.title || 'Our Song') + (store.song.artist ? ' · ' + store.song.artist : '');
-      tempo.value = store.song.bpm; tempoLabel.textContent = '🐢 ' + store.song.bpm + ' 🐇';
+      tempo.value = store.song.bpm; tempoLabel.textContent = '🐢 ' + Math.round(store.song.bpm) + ' 🐇';
+      // a song with singing in it keeps its speed: the recordings cannot stretch
+      const sung = Object.values(store.song.instruments || {}).some((r) => r.vocal);
+      tempo.disabled = sung; tempo.title = sung ? 'This song has singing in it, so its speed is locked to the singing.' : 'speed';
+      if (sung) tempoLabel.textContent = '🔒 ' + Math.round(store.song.bpm) + ' beats a minute';
     };
     store.subscribe(draw); draw();
     player.onTick(() => { play.textContent = player.playing ? '⏹️ Stop' : '▶️ Play'; play.classList.toggle('on', player.playing); });

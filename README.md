@@ -53,7 +53,17 @@ an instrument, and the wish star.
 **Studio** (grown-ups). A step grid, the text lanes, instrument recipes as JSON, a
 sound lab, lyrics, and WAV export.
 
-### Singing
+### Starting from your own singing
+
+Open the 🌱 page, sing a little bit of a song with no music and no counting, and drag
+the two edges to keep the best bit. Press ✨ and a first song is built around it: the
+tempo is chosen so your bit is a whole number of bars, the band tunes itself to your
+voice, the chords follow the notes you sang, and an intro plays your tune back on a
+bell. From there you add verses in the vocal booth and ask Claude for the rest.
+
+The same thing from a file: `node tools/sunosux.js seed memo.m4a --title "Our Song"`.
+
+### Singing over a piece
 
 Pick a piece, press 🎤, wait for the count of four, and sing along. The take is cut to
 start exactly where the piece starts and is added to that piece, so it plays wherever
@@ -79,6 +89,7 @@ node tools/sunosux.js check [song]     find mistakes in a song
 node tools/sunosux.js render [song]    song to WAV (--part chorus for one piece)
 node tools/sunosux.js sound <name>     hear one instrument recipe
 node tools/sunosux.js list             songs, pieces, instruments, recordings, bricks, pages
+node tools/sunosux.js seed <recording>  grow a song from a bit of singing
 node tools/sunosux.js new-song <name>
 node tools/sunosux.js new-interface <name> --bricks a,b,c
 node tools/sunosux.js wishes

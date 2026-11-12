@@ -66,28 +66,6 @@
     };
   }
 
-  // Make a raw take sit nicely over the band. Returns how loud the raw take was.
-  function polish(x) {
-    const a = Math.exp(-2 * Math.PI * 85 / S.SR);
-    let low = 0, peak = 0;
-    for (let i = 0; i < x.length; i++) { low = a * low + (1 - a) * x[i]; x[i] -= low; peak = Math.max(peak, Math.abs(x[i])); } // rumble out
-    if (peak < 0.005) return peak;
-    // a gentle squeeze so quiet words are not lost and loud ones do not jump out
-    const att = Math.exp(-1 / (0.005 * S.SR)), rel = Math.exp(-1 / (0.15 * S.SR)), thr = 0.25;
-    let env = 0, top = 0;
-    for (let i = 0; i < x.length; i++) {
-      const v = Math.abs(x[i] /= peak);
-      env = v > env ? att * env + (1 - att) * v : rel * env + (1 - rel) * v;
-      if (env > thr) x[i] *= Math.pow(env / thr, -0.55);
-      top = Math.max(top, Math.abs(x[i]));
-    }
-    const fin = Math.min(x.length, Math.round(0.01 * S.SR)), fout = Math.min(x.length, Math.round(0.08 * S.SR));
-    for (let i = 0; i < x.length; i++) x[i] *= 0.9 / top;
-    for (let i = 0; i < fin; i++) x[i] *= i / fin;
-    for (let i = 0; i < fout; i++) x[x.length - 1 - i] *= i / fout;
-    return peak;
-  }
-
   const pref = (k, v) => v === undefined ? H.safe(() => localStorage.getItem('sunosux:' + k), null) : H.safe(() => localStorage.setItem('sunosux:' + k, v));
 
   Kit.components.sing = (el, app) => {
@@ -128,7 +106,7 @@
       const i0 = Math.max(0, Math.round((r.tPart + out.latency - out.t0) * out.rate));
       if (out.data.length - i0 < out.rate) { draw(); return Kit.toast('That was too short to keep. Start singing after the count of four!'); }
       const data = S.resample(out.data.slice(i0, i0 + Math.round((r.dur + 0.5) * out.rate)), out.rate);
-      if (polish(data) < 0.005) { draw(); return Kit.toast('🙉 I could not hear any singing. Is the right microphone picked?'); }
+      if (S.polishVoice(data) < 0.005) { draw(); return Kit.toast('🙉 I could not hear any singing. Is the right microphone picked?'); }
       const key = 'take-' + Date.now().toString(36);
       store.addSample(key, data);
       store.change((s) => {

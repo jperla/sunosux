@@ -32,10 +32,11 @@ make small edits rather than rewriting the whole file.
 | `sounds/*.wav` | Recordings (her voice, claps, anything). |
 | `src/engine.js` | Song data to audio. Pure JS DSP, same code in browser and Node. |
 | `src/instruments.js` | Built-in instrument recipes. |
+| `src/seed.js` | Grows a first-draft song from a bit of singing: tempo, key, tuning, tune, chords. |
 | `src/kit.js`, `src/kit.css` | The store, player, hot reload and look shared by every page. |
-| `bricks/*.js` | UI bricks: `stage`, `sing`, `pads`, `timeline`, `parts`, `editor`, `lanes`, `hum`, `recorder`, `soundLab`, `lyrics`, `wish`, `playBar`, `saveBar`. |
+| `bricks/*.js` | UI bricks: `stage`, `seed`, `sing`, `pads`, `timeline`, `parts`, `editor`, `lanes`, `hum`, `recorder`, `soundLab`, `lyrics`, `wish`, `playBar`, `saveBar`. |
 | `interfaces/<name>/index.html` | Pages. Each is a short list of bricks. |
-| `tools/sunosux.js` | CLI: `dev`, `check`, `render`, `sound`, `list`, `new-song`, `new-interface`, `wishes`, `test`. |
+| `tools/sunosux.js` | CLI: `dev`, `check`, `render`, `sound`, `list`, `seed`, `new-song`, `new-interface`, `wishes`, `test`. |
 
 ## Song format
 
@@ -64,6 +65,22 @@ Every lane in a part must be exactly `bars × 16` steps. `check` tells you when 
 `scale` is the set of notes the kid-facing pads, grid and hum catcher are allowed to
 use, so nothing she plays can sound wrong. Changing the mood of a song usually means
 changing `scale`, `bpm` and the instrument recipes together.
+
+## Songs that grow from singing
+
+The 🌱 seed page (and `node tools/sunosux.js seed <recording>`) starts from a bit of
+singing with no backing. It picks a tempo that makes the chosen bit a whole number of
+bars, tunes the band to the singer (`song.tuning`, in cents), reads the key and the
+tune, picks a chord per bar, and writes a draft: `intro`, `hook` (the singing plus a
+band), `verse` (band only, waiting for words) and `outro`.
+
+The draft is deliberately plain. Building the real song around it is your job, with them:
+
+- `song.seed` holds what the singing told us: `melody` (a lane), `chords`, `key`, `bpm`, `lyrics`, and `recording` (the whole take in `sounds/`, of which `piece` is the chosen bit, cut at `from`..`to` seconds).
+- Write new parts that answer the hook: a verse tune from the same scale that leaves room and moves less than the hook, a pre-chorus that climbs into it, a bridge on other chords of the key. Reuse a fragment of `seed.melody` somewhere so the song sounds like one idea.
+- The detected chords are a guess from the sung notes. If a bar sounds wrong, a neighbouring chord of the key that contains the bar's long notes usually fixes it.
+- Never change `bpm` or `tuning` of a seeded song: the recording cannot stretch, so it would fall out of time or out of tune. Change the feel with the drum pattern (half-time, double-time hats) instead.
+- Another bit of the same take can become another part: `node tools/sunosux.js seed sounds/<id>-full.wav --start 12 --end 19 --title scratch`, then move that hook lane and instrument into the song.
 
 ## Instruments
 

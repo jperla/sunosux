@@ -14,10 +14,35 @@
 <main>
   <h1>🎤 sunosux</h1>
   <p>Songs made out of parts, by a kid and a grown-up, with pages that change to fit the song.</p>
-  <a class="sx-card-link" href="interfaces/stage/">🌟 Hunter Stage <small>for kids: play the show, zap shadows, bang pads, hum a tune, make a wish</small></a>
+  <a class="sx-card-link" href="interfaces/seed/">🌱 Start a song from your singing <small>sing a little bit, pick the best part, and a song grows around it</small></a>
+  <h2>Our songs</h2>
+  <div class="sx-songs" id="songs"><a class="sx-card-link" href="interfaces/stage/">🌟 Shine Brighter <small>the kid stage</small></a></div>
+  <h2>Pages</h2>
+  <a class="sx-card-link" href="interfaces/stage/">🌟 Hunter Stage <small>for kids: play the show, zap shadows, sing, bang pads, hum a tune, make a wish</small></a>
   <a class="sx-card-link" href="interfaces/studio/">🎛️ Studio <small>for grown-ups: grids, text lanes, instrument recipes, everything</small></a>
   <!-- new interfaces go here -->
   <p class="sx-small">Source and instructions: <a href="https://github.com/jperla/sunosux">github.com/jperla/sunosux</a></p>
 </main>
+<script>
+// List the songs: from the repo when the live studio is running, plus any made in this browser.
+(async () => {
+  const songs = new Map();
+  try { const r = await fetch('api/songs'); if (r.ok) (await r.json()).forEach((s) => songs.set(s.name, s.title)); } catch (e) {}
+  try {
+    Object.keys(localStorage).forEach((k) => { const m = /^sunosux:\.\.\/\.\.\/songs\/([\w-]+)\.json$/.exec(k); if (m && !songs.has(m[1])) songs.set(m[1], (JSON.parse(localStorage.getItem(k)) || {}).title); });
+  } catch (e) {}
+  if (!songs.size) return;
+  const box = document.getElementById('songs');
+  box.replaceChildren(...[...songs].map(([name, title]) => {
+    const a = document.createElement('a'), small = document.createElement('small');
+    a.className = 'sx-card-link'; a.href = 'interfaces/stage/?song=' + encodeURIComponent(name);
+    a.textContent = '🎵 ' + (title || name);
+    small.append('open on the kid stage · ');
+    const studio = document.createElement('a'); studio.href = 'interfaces/studio/?song=' + encodeURIComponent(name); studio.textContent = 'open in the studio';
+    small.append(studio); a.append(small);
+    return a;
+  }));
+})();
+</script>
 </body>
 </html>

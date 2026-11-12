@@ -344,6 +344,7 @@
     let L = new Float32Array(Math.ceil(total * SR));
     let R = new Float32Array(L.length);
     const samples = options.samples || {};
+    const tune = Math.pow(2, (song.tuning || 0) / 1200); // song.tuning (cents) moves the whole band to match a singer
     const cache = new Map();
     const hits = [];
     const missing = new Set();
@@ -370,7 +371,7 @@
             for (const n of notes) {
               const hold = ev.len * stepSec;
               const key = tr.instrument + '|' + n + '|' + ev.len + '|' + ev.vel;
-              if (!cache.has(key)) cache.set(key, renderSampleVoice(recipe, data, n ? noteToFreq(n) : 0, hold, ev.vel));
+              if (!cache.has(key)) cache.set(key, renderSampleVoice(recipe, data, n ? noteToFreq(n) * tune : 0, hold, ev.vel));
               // recipe.offset (seconds) slides a recording later (+) or earlier (-), to line a sung take up with the band
               let at = start + Math.round((recipe.offset || 0) * SR), sound = cache.get(key);
               if (at < 0) { sound = sound.subarray(Math.min(sound.length, -at)); at = 0; }
@@ -384,7 +385,7 @@
             const hold = ev.len * stepSec * (recipe.legato ?? 0.92);
             ev.notes.forEach((n, ni) => {
               const key = tr.instrument + '|' + n + '|' + ev.len + '|' + ev.vel;
-              if (!cache.has(key)) cache.set(key, renderTone(recipe, noteToFreq(n), hold, ev.vel, seed++));
+              if (!cache.has(key)) cache.set(key, renderTone(recipe, noteToFreq(n) * tune, hold, ev.vel, seed++));
               const spread = ev.notes.length > 1 ? (ni / (ev.notes.length - 1) - 0.5) * 0.5 : 0;
               mixInto(L, R, cache.get(key), start, Math.max(-1, Math.min(1, pan + spread)), gain);
             });
@@ -413,29 +414,26 @@
   }
 
   // Render one recipe on its own (for the Sound Lab "try it" button).
-  function renderSample(recipe, note, seconds, samples) {
+  function renderSample(recipe, note, seconds, samples, tuning) {
+    const tune = Math.pow(2, (tuning || 0) / 1200);
     if (recipe.sample) {
       const data = (samples || {})[recipe.sample];
       if (!data) throw new Error('missing recording: ' + recipe.sample);
-      const s = renderSampleVoice(recipe, data, noteToFreq(note || recipe.root || 'C4'), seconds || 0.6, 0.9);
+      const s = renderSampleVoice(recipe, data, noteToFreq(note || recipe.root || 'C4') * tune, seconds || 0.6, 0.9);
       return { sampleRate: SR, left: s, right: s };
     }
-    const s = recipe.kind ? renderDrum(recipe, 0.9, 3) : renderTone(recipe, noteToFreq(note || 'A4'), seconds || 0.4, 0.9, 3);
+    const s = recipe.kind ? renderDrum(recipe, 0.9, 3) : renderTone(recipe, noteToFreq(note || 'A4') * tune, seconds || 0.4, 0.9, 3);
     return { sampleRate: SR, left: s, right: s };
   }
 
-  // ---------- hum catcher: a recording of humming/singing -> a melody lane ----------
-  // opts: { bpm, stepsPerBeat, steps, scale: ['A','C','D','E','G'], grid: 2 }
-  // Listens for the pitch (YIN), snaps it to the scale and to the beat grid.
-  function detectMelody(data, opts) {
-    opts = opts || {};
-    const spb = opts.stepsPerBeat || 4, grid = opts.grid || 2;
-    const cellSec = 60 / (opts.bpm || 120) / spb * grid;
-    const scale = (opts.scale || ['A', 'C', 'D', 'E', 'G']).map((n) => NOTE_INDEX[n[0].toUpperCase()] + (n[1] === '#' ? 1 : n[1] === 'b' ? -1 : 0));
+  // ---------- listening to a voice ----------
+  // The pitch of a recording, frame by frame (YIN). Each frame is { t, rms, midi },
+  // with midi null where there is no clear pitch (breaths, consonants, silence).
+  function pitchFrames(data) {
     // halve the sample rate: plenty for a voice, 4x cheaper
     const x = new Float32Array(data.length >> 1);
     for (let i = 0; i < x.length; i++) x[i] = (data[2 * i] + data[2 * i + 1]) / 2;
-    const sr = SR / 2, W = 512, hop = 256, minLag = Math.floor(sr / 1000), maxLag = Math.ceil(sr / 80);
+    const sr = SR / 2, W = 1024, hop = 256, minLag = Math.floor(sr / 1000), maxLag = Math.ceil(sr / 80);
     const frames = [];
     let maxRms = 0;
     const d = new Float32Array(maxLag + 1);
@@ -456,15 +454,33 @@
         if (d[tau] < 0.15 && d[tau] <= d[tau + 1]) { best = tau; break; }
       }
       if (best < 0) { let m = 1; for (let tau = minLag; tau <= maxLag; tau++) if (d[tau] < m) { m = d[tau]; best = tau; } if (m > 0.35) best = -1; }
-      frames.push({ t: p / sr, rms, midi: best > 0 ? 69 + 12 * Math.log2(sr / best / 440) : null });
+      let lag = best;
+      if (best > 1 && best < maxLag) { // a parabola through the dip gives a finer pitch than whole samples
+        const y0 = d[best - 1], y1 = d[best], y2 = d[best + 1], den = y0 - 2 * y1 + y2;
+        if (den > 0) lag = best + (y0 - y2) / (2 * den);
+      }
+      frames.push({ t: (p + W / 2) / sr, rms, midi: best > 0 ? 69 + 12 * Math.log2(sr / lag / 440) : null });
     }
-    const voiced = frames.filter((f) => f.midi != null && f.rms > maxRms * 0.15);
-    if (!voiced.length) return { lane: '', notes: 0 };
-    const t0 = voiced[0].t;
+    return { frames, maxRms };
+  }
+
+  // A recording of humming or singing -> a melody lane.
+  // opts: { bpm, stepsPerBeat, steps, grid: 2, scale: ['A','C','D','E','G'],
+  //         origin: seconds where step 0 is (default: the first sung note),
+  //         tuning: cents the singer is sharp (+) or flat (-), pitch: pitchFrames(data) if you already have it }
+  function detectMelody(data, opts) {
+    opts = opts || {};
+    const spb = opts.stepsPerBeat || 4, grid = opts.grid || 2;
+    const cellSec = 60 / (opts.bpm || 120) / spb * grid;
+    const scale = (opts.scale || ['A', 'C', 'D', 'E', 'G']).map((n) => NOTE_INDEX[n[0].toUpperCase()] + (n[1] === '#' ? 1 : n[1] === 'b' ? -1 : 0));
+    const pitch = opts.pitch || pitchFrames(data), frames = pitch.frames, maxRms = pitch.maxRms, tune = (opts.tuning || 0) / 100;
+    const isVoiced = (f) => f.midi != null && f.rms > maxRms * 0.15;
+    const voiced = frames.filter(isVoiced);
+    if (!voiced.length) return { lane: '', notes: 0, shift: 0 };
+    const t0 = opts.origin != null ? opts.origin : voiced[0].t - 0.02;
     // put the whole tune in a comfy octave (so grown-up voices work too)
-    const sorted = voiced.map((f) => f.midi).sort((a, b) => a - b);
-    const mid = sorted[sorted.length >> 1];
-    const shift = Math.round((72 - mid) / 12) * 12;
+    const sorted = voiced.map((f) => f.midi - tune).sort((a, b) => a - b);
+    const shift = Math.round((72 - sorted[sorted.length >> 1]) / 12) * 12;
     const snap = (m) => {
       let bestN = Math.round(m), bestD = 99;
       for (let n = Math.floor(m) - 3; n <= Math.ceil(m) + 3; n++) {
@@ -475,11 +491,11 @@
     const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
     const name = (n) => NAMES[((n % 12) + 12) % 12] + (Math.floor(n / 12) - 1);
     const cells = [];
-    const nCells = Math.ceil((frames[frames.length - 1].t - t0) / cellSec + 0.5);
+    const nCells = opts.steps ? Math.ceil(opts.steps / grid) : Math.ceil((frames[frames.length - 1].t - t0) / cellSec + 0.5);
     for (let c = 0; c < nCells; c++) {
       const a = t0 + c * cellSec, b = a + cellSec;
       const inCell = frames.filter((f) => f.t >= a && f.t < b);
-      const v = inCell.filter((f) => f.midi != null && f.rms > maxRms * 0.15).map((f) => f.midi).sort((p, q) => p - q);
+      const v = inCell.filter(isVoiced).map((f) => f.midi - tune).sort((p, q) => p - q);
       cells.push(inCell.length && v.length / inCell.length >= 0.4 ? snap(v[v.length >> 1] + shift) : null);
     }
     const total = opts.steps || cells.length * grid;
@@ -495,10 +511,32 @@
     });
     const out = [];
     for (let i = 0; i < total; i += 16) out.push(toks.slice(i, i + 16).join(' '));
-    return { lane: out.join(' | '), notes: count };
+    return { lane: out.join(' | '), notes: count, shift };
   }
 
-  // ---------- WAV ----------
+  // Make a raw voice recording sit nicely over the band: rumble out, a gentle
+  // squeeze so quiet words are not lost, full level, soft edges. Changes x in
+  // place and returns how loud the raw recording was (0..1).
+  function polishVoice(x) {
+    const a = Math.exp(-2 * Math.PI * 85 / SR);
+    let low = 0, peak = 0;
+    for (let i = 0; i < x.length; i++) { low = a * low + (1 - a) * x[i]; x[i] -= low; peak = Math.max(peak, Math.abs(x[i])); }
+    if (peak < 0.005) return peak;
+    const att = Math.exp(-1 / (0.005 * SR)), rel = Math.exp(-1 / (0.15 * SR)), thr = 0.25;
+    let env = 0, top = 0;
+    for (let i = 0; i < x.length; i++) {
+      const v = Math.abs(x[i] /= peak);
+      env = v > env ? att * env + (1 - att) * v : rel * env + (1 - rel) * v;
+      if (env > thr) x[i] *= Math.pow(env / thr, -0.55);
+      top = Math.max(top, Math.abs(x[i]));
+    }
+    const fin = Math.min(x.length, Math.round(0.01 * SR)), fout = Math.min(x.length, Math.round(0.08 * SR));
+    for (let i = 0; i < x.length; i++) x[i] *= 0.9 / top;
+    for (let i = 0; i < fin; i++) x[i] *= i / fin;
+    for (let i = 0; i < fout; i++) x[x.length - 1 - i] *= i / fout;
+    return peak;
+  }
+
   // audio.right is optional: leave it out for a mono file (recordings)
   function encodeWav(audio) {
     const ch = audio.right ? 2 : 1, n = audio.left.length, bytes = n * ch * 2;
@@ -518,7 +556,7 @@
     return buf;
   }
 
-  const api = { SR, noteToMidi, noteToFreq, parseLane, render, renderSample, songTimeline, encodeWav, decodeWav, resample, detectMelody };
+  const api = { SR, noteToMidi, noteToFreq, parseLane, render, renderSample, songTimeline, encodeWav, decodeWav, resample, pitchFrames, detectMelody, polishVoice };
   root.Sunosux = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

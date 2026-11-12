@@ -272,7 +272,7 @@
         if (!recipe) return;
         try {
           const key = JSON.stringify(recipe) + '|' + note;
-          if (!shots.has(key)) { if (shots.size > 300) shots.clear(); shots.set(key, player.toBuffer(S.renderSample(recipe, note || 'C5', 0.5, store.samples))); }
+          if (!shots.has(key)) { if (shots.size > 300) shots.clear(); shots.set(key, player.toBuffer(S.renderSample(recipe, note || 'C5', 0.5, store.samples, store.song.tuning))); }
           const c = player.audioContext(), s = c.createBufferSource();
           s.buffer = shots.get(key); s.connect(c.destination); s.start();
         } catch (e) { toast(e.message); }
@@ -323,7 +323,10 @@
   // ---------- microphone ----------
   // A tap-to-start, tap-to-stop record button. onData gets mono 44.1 kHz audio,
   // trimmed of silence and made nice and loud.
-  function micButton(app, label, onData, maxSeconds) {
+  // opts: { raw: true } turns off the browser's phone-call processing (best for singing with no music playing),
+  //       onStart / onStop are called as recording begins and ends.
+  function micButton(app, label, onData, maxSeconds, opts) {
+    opts = opts || {};
     let rec = null, timer = null;
     const btn = h('button', { class: 'sx-big sx-rec' }, label);
     const finish = async (blob) => {
@@ -341,16 +344,17 @@
         onData(data);
       } catch (e) { toast('🙈 that sound did not work: ' + e.message); }
     };
-    const stop = () => { clearTimeout(timer); if (rec && rec.state === 'recording') rec.stop(); btn.classList.remove('on'); btn.textContent = label; };
+    const stop = () => { clearTimeout(timer); if (rec && rec.state === 'recording') { rec.stop(); if (opts.onStop) opts.onStop(); } btn.classList.remove('on'); btn.textContent = label; };
     btn.addEventListener('click', async () => {
       if (rec && rec.state === 'recording') return stop();
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: opts.raw ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false } : true });
         const chunks = [];
         rec = new MediaRecorder(stream);
         rec.ondataavailable = (ev) => chunks.push(ev.data);
         rec.onstop = () => { stream.getTracks().forEach((t) => t.stop()); finish(new Blob(chunks, { type: rec.mimeType })); };
         rec.start();
+        if (opts.onStart) opts.onStart();
         btn.classList.add('on'); btn.textContent = '🔴 listening… tap to stop';
         timer = setTimeout(stop, (maxSeconds || 8) * 1000);
       } catch (e) { toast('🙈 The microphone is blocked in this window. Open this page in Chrome or Safari and allow the microphone.'); }
@@ -383,10 +387,16 @@
     if (wanted && src) src = src.replace(/[^/]+\.json$/, wanted.replace(/[^\w-]/g, '') + '.json');
     const soundsUrl = src ? new URL('../sounds/', new URL(src, location.href)).href : 'sounds/';
     const live = !opts.song && !!src && await fetch('/api/ping').then((r) => r.ok && r.headers.get('x-sunosux') === '1').catch(() => false);
-    const original = opts.song || (el && el.textContent.trim() ? JSON.parse(el.textContent) : await (await fetch(src, { cache: 'no-store' })).json());
-    const io = live ? serverIO(new URL(src, location.href).pathname.slice(1)) : localIO(src || original.title || 'song');
+    let original = opts.song || null;
+    if (!original) original = el && el.textContent.trim() ? JSON.parse(el.textContent) : await fetch(src, { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).catch(() => null);
+    const io = live ? serverIO(new URL(src, location.href).pathname.slice(1)) : localIO(src || (original && original.title) || 'song');
     const saved = io.load();
+    if (!original && !(saved && saved.parts)) { // a song made in another browser, or a mistyped name
+      document.body.append(h('main', {}, h('h1', {}, '🙈 I could not find that song'), h('a', { href: '../../' }, '🏠 all songs')));
+      throw new Error('no song at ' + src);
+    }
     const song = saved && saved.parts ? saved : clone(original);
+    if (!original) original = clone(song);
     const samples = await loadSamples(song, io, soundsUrl);
     const store = createStore(song, samples, io);
     const player = createPlayer(store);
@@ -423,9 +433,27 @@
       node.classList.add('sx-brick', 'sxb-' + node.dataset.kit);
       try { brick(node, app); } catch (e) { node.textContent = '🧱 ' + node.dataset.kit + ' broke: ' + e.message; console.error(e); }
     });
+    // links between pages keep you on the same song
+    if (wanted) document.querySelectorAll('nav.sx-nav a[data-keep-song]').forEach((a) => { a.href = a.getAttribute('href') + '?song=' + encodeURIComponent(wanted); });
     root.app = app;
     return app;
   };
+
+  // Save a brand-new song (and its recordings) next to the others, without touching the one that is open.
+  Kit.saveNewSong = async (app, id, song, samples) => {
+    if (app.live) {
+      const put = async (path, body) => { const r = await fetch('/api/file?path=' + encodeURIComponent(path), { method: 'PUT', headers: API, body }); if (!r.ok) throw new Error('could not save ' + path + ': ' + await r.text()); };
+      for (const [name, data] of Object.entries(samples)) await put('sounds/' + name + '.wav', monoWav(data));
+      await put('songs/' + id + '.json', JSON.stringify(song, null, 2) + '\n');
+    } else {
+      const io = localIO('../../songs/' + id + '.json');
+      io.saveSong(song);
+      for (const [name, data] of Object.entries(samples)) await io.saveSample(name, data);
+    }
+  };
+  Kit.songExists = (app, id) => app.live
+    ? fetch('/songs/' + id + '.json', { cache: 'no-store' }).then((r) => r.ok).catch(() => false)
+    : Promise.resolve(!!safe(() => localStorage.getItem('sunosux:../../songs/' + id + '.json'), null));
 
   Object.assign(Kit, { h, fill, toast, busy, download, micButton, monoWav, EMOJI, COLORS, API,
     helpers: { clone, safe, stepsPerBar, partSteps, instrumentsOf, isDrumRecipe, scaleNotes, laneEvents, eventsToLane, emptyLane, addHit, setBars } });
