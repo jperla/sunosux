@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hunter Stage</title>
+<link rel="stylesheet" href="../../src/kit.css">
+</head>
+<body class="kid">
+<!-- Which song this page opens. Add ?song=other-name to the address to open another one. -->
+<script type="application/json" id="song" data-src="../../songs/shine-brighter.json"></script>
+<main>
+  <!-- The kid page: big buttons, almost no reading. -->
+  <div data-kit="stage"></div>
+  <div data-kit="timeline"></div>
+  <div data-kit="parts"></div>
+  <div data-kit="pads"></div>
+  <div data-kit="hum"></div>
+  <div data-kit="recorder"></div>
+  <div data-kit="wish"></div>
+  <nav class="sx-nav"><a href="../studio/">🎛️ grown-up studio</a> <a href="../../">🏠 all pages</a></nav>
+</main>
+<script src="../../src/engine.js"></script>
+<script src="../../src/instruments.js"></script>
+<script src="../../src/kit.js"></script>
+<script src="../../bricks/basics.js"></script>
+<script src="../../bricks/stage.js"></script>
+<script src="../../bricks/pads.js"></script>
+<script src="../../bricks/voice.js"></script>
+<script src="../../bricks/wish.js"></script>
+<script>Sunosux.Kit.boot();</script>
+</body>
+</html>

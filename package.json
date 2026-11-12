@@ -1,0 +1,17 @@
+{
+  "name": "sunosux",
+  "version": "0.1.0",
+  "description": "A song-making harness: instruments, pieces and interfaces made of parts, for a kid and a grown-up, shaped by Claude as you go.",
+  "license": "MIT",
+  "repository": "github:jperla/sunosux",
+  "private": true,
+  "scripts": {
+    "dev": "node tools/sunosux.js dev",
+    "check": "node tools/sunosux.js check",
+    "render": "node tools/sunosux.js render",
+    "test": "node tools/sunosux.js test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

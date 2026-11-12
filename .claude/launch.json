@@ -1,0 +1,16 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "studio",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/sunosux.js",
+        "dev",
+        "--port",
+        "4747"
+      ],
+      "port": 4747
+    }
+  ]
+}
