@@ -39,7 +39,20 @@ function envelope(x) {
 function phrasesIn(data, opts) {
   opts = opts || {};
   const found = L.findNotes(data), tuning = L.tuningOf(found.notes);
-  const raw = L.phrasesOf(found.notes, opts.gap || 0.5);
+  let raw = L.phrasesOf(found.notes, opts.gap || 0.5);
+  // opts.maxLen: someone who hardly pauses gives phrases too long to line up with a beat.
+  // Split those at their biggest breath until each is short enough (or has no breath left).
+  if (opts.maxLen) {
+    const split = (p) => {
+      if (p.dur <= opts.maxLen || p.notes.length < 2) return [p];
+      let at = -1, big = 0.12;
+      for (let i = 1; i < p.notes.length; i++) { const g = p.notes[i].t - (p.notes[i - 1].t + p.notes[i - 1].dur); if (g > big) { big = g; at = i; } }
+      if (at < 0) return [p];
+      const mk = (ns) => ({ t: ns[0].t, dur: ns[ns.length - 1].t + ns[ns.length - 1].dur - ns[0].t, notes: ns });
+      return split(mk(p.notes.slice(0, at))).concat(split(mk(p.notes.slice(at))));
+    };
+    raw = raw.flatMap(split);
+  }
   const env = envelope(data), sorted = env.db.slice().sort((a, b) => a - b);
   const floor = sorted[Math.floor(sorted.length * 0.1)], open = floor + 9;
   const at = (t) => env.db[Math.max(0, Math.min(env.db.length - 1, Math.round(t / env.step)))];

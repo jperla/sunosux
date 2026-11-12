@@ -83,6 +83,8 @@ const commands = {
   new-song <name>                   start an empty song (--bpm 110)
   new-interface <name>              start a page from bricks (--bricks stage,pads,wish --kid --song name)
   seed <recording> --title "Name"   grow a new song from a bit of singing (--start 2.5 --end 9 --bars 4 --lyrics "…")
+  grow <song>                       tidy a seed song's singing onto the beat and arrange a band around it (--bpm 100 --root A)
+  listen <song-or-wav>              print every sung note, the phrases, tuning, key and a bar-by-bar chord table
   wishes                            show wishes waiting in wishes/inbox.md
   test                              check every song and the hum catcher
 
@@ -225,6 +227,17 @@ ${[...files].map((f) => `<script src="../../${f}"></script>`).join('\n')}
     console.log(`  open http://localhost:4747/interfaces/stage/?song=${id}`);
   },
 
+  grow() {
+    const id = rest[0] || die('which song? node tools/sunosux.js grow <song-name>');
+    try { const song = require('./grow.js').grow(id.replace(/\.json$/, ''), Object.assign({ log: console.log }, flags)); console.log(`✓ songs/${id}.json: ${song.arrangement.join(' > ')}`); }
+    catch (e) { die(e.message); }
+  },
+
+  listen() {
+    const r = require('child_process').spawnSync(process.execPath, [path.join(__dirname, 'listen.js'), ...process.argv.slice(3)], { stdio: 'inherit' });
+    process.exit(r.status || 0);
+  },
+
   wishes() {
     const p = rel('wishes', 'inbox.md');
     console.log(fs.existsSync(p) && fs.readFileSync(p, 'utf8').trim() ? fs.readFileSync(p, 'utf8') : 'no wishes waiting ⭐');
@@ -340,6 +353,14 @@ function devServer(port) {
           const tmp = rel(p + '.tmp');
           fs.writeFileSync(tmp, data); fs.renameSync(tmp, rel(p));
           return end(200, 'saved');
+        }
+        if (url.pathname === '/api/grow' && req.method === 'POST') {
+          // the seed page asks for this right after saving a new song: tidy the singing and arrange a band around it
+          const id = (url.searchParams.get('song') || '').replace(/[^\w-]/g, '');
+          if (!id || !fs.existsSync(rel('songs', id + '.json'))) return end(404, 'no such song');
+          const lines = [];
+          try { require('./grow.js').grow(id, { log: (l) => lines.push(l) }); console.log('🌱 grew ' + id + '\n' + lines.join('\n')); return end(200, JSON.stringify({ ok: true, log: lines }), { 'content-type': 'application/json' }); }
+          catch (e) { console.log('🌱 could not grow ' + id + ': ' + e.message); return end(200, JSON.stringify({ ok: false, error: String(e.message || e) }), { 'content-type': 'application/json' }); }
         }
         if (url.pathname === '/api/wish' && req.method === 'POST') {
           const wish = JSON.parse((await body(req, 20000)).toString('utf8'));

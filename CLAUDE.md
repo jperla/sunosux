@@ -36,7 +36,8 @@ make small edits rather than rewriting the whole file.
 | `src/kit.js`, `src/kit.css` | The store, player, hot reload and look shared by every page. |
 | `bricks/*.js` | UI bricks: `stage`, `seed`, `sing`, `pads`, `timeline`, `parts`, `editor`, `lanes`, `hum`, `recorder`, `soundLab`, `lyrics`, `wish`, `playBar`, `saveBar`. |
 | `interfaces/<name>/index.html` | Pages. Each is a short list of bricks. |
-| `tools/sunosux.js` | CLI: `dev`, `check`, `render`, `sound`, `list`, `seed`, `new-song`, `new-interface`, `wishes`, `test`. |
+| `tools/sunosux.js` | CLI: `dev`, `check`, `render`, `sound`, `list`, `seed`, `grow`, `listen`, `new-song`, `new-interface`, `wishes`, `test`. |
+| `tools/listen.js`, `tools/tidy.js`, `tools/grow.js` | Hear a sung take note by note, tidy it onto the beat, and grow an arrangement around it. |
 
 ## Song format
 
@@ -74,7 +75,17 @@ bars, tunes the band to the singer (`song.tuning`, in cents), reads the key and 
 tune, picks a chord per bar, and writes a draft: `intro`, `hook` (the singing plus a
 band), `verse` (band only, waiting for words) and `outro`.
 
-The draft is deliberately plain. Building the real song around it is your job, with them:
+With the live studio running, the seed page then calls `grow` on the new song by itself
+(`node tools/sunosux.js grow <song>` does the same by hand). Grow listens to the take, moves
+whole phrases onto beats without stretching them, splits the take into parts `sing1..N`,
+holds a drone under them with one inner voice that follows what is sung in each bar, freezes
+the singer's steadiest note into a `voice-choir` instrument, and arranges strings, cello,
+music box, harp and small-sound beats as an arc (intimate, pulse, build, full, bare). It
+keeps the voice about 8 dB or more over the band where voices are heard. `--again` regrows
+from the recording and replaces every part, so only do that when asked. The plain draft it
+replaced is kept in `out/<song>-before-grow.json`.
+
+A grown song is still only a first arrangement. Making it theirs is your job, with them:
 
 - `song.seed` holds what the singing told us: `melody` (a lane), `chords`, `key`, `bpm`, `lyrics`, and `recording` (the whole take in `sounds/`, of which `piece` is the chosen bit, cut at `from`..`to` seconds).
 - Write new parts that answer the hook: a verse tune from the same scale that leaves room and moves less than the hook, a pre-chorus that climbs into it, a bridge on other chords of the key. Reuse a fragment of `seed.melody` somewhere so the song sounds like one idea.

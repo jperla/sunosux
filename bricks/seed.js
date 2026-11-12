@@ -110,6 +110,12 @@
         if (!kept) files[full] = data;
         const song = Seed.build(analysis, { title: name, lyrics: lyrics.value.trim(), sample: id + '-hook', recording: full, from: +a.toFixed(3), to: +b.toFixed(3) });
         await Kit.saveNewSong(app, id, song, files);
+        // with the live studio running, grow it straight away: the singing is tidied onto the beat
+        // and a band is arranged around it. If that fails, the plain draft is still a song.
+        if (app.live) {
+          Kit.toast('🌱 growing a song around your singing…');
+          await fetch('/api/grow?song=' + id, { method: 'POST', headers: Kit.API }).catch(() => null);
+        }
         location.href = '../stage/?song=' + id;
       } catch (e) { Kit.toast('🙈 ' + e.message); }
     }
