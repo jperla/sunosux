@@ -29,6 +29,8 @@
     for (const kid of kids.flat(3)) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(kid));
     return el;
   }
+  // Replace everything inside el. Arrays are flattened; null and false are skipped.
+  const fill = (el, ...kids) => el.replaceChildren(...kids.flat(3).filter((k) => k != null && k !== false).map((k) => k.nodeType ? k : document.createTextNode(k)));
   const clone = (x) => JSON.parse(JSON.stringify(x));
   const safe = (fn, fallback) => { try { return fn(); } catch (e) { return fallback; } };
 
@@ -122,23 +124,21 @@
     ['bg', 'bg2', 'panel', 'ink', 'accent', 'accent2', 'gold'].forEach((k) => t[k] ? st.setProperty('--sx-' + k, t[k]) : st.removeProperty('--sx-' + k));
   }
 
-  // ---------- recordings <-> text ----------
-  function floatToB64(data) {
-    const pcm = new Int16Array(data.length);
-    for (let i = 0; i < data.length; i++) pcm[i] = Math.max(-1, Math.min(1, data[i])) * 32767;
-    const bytes = new Uint8Array(pcm.buffer);
-    let bin = '';
-    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-    return btoa(bin);
+  // ---------- recordings ----------
+  const monoWav = (data) => S.encodeWav({ sampleRate: S.SR, left: data });
+  // In static mode recordings live in this browser's IndexedDB (a sung take is far too big for localStorage).
+  function idb(mode, fn) {
+    return new Promise((resolve, reject) => {
+      const open = indexedDB.open('sunosux', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('samples');
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const tx = open.result.transaction('samples', mode), req = fn(tx.objectStore('samples'));
+        tx.oncomplete = () => resolve(req && req.result);
+        tx.onerror = () => reject(tx.error);
+      };
+    });
   }
-  function b64ToFloat(b64) {
-    const bin = atob(b64), bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    const pcm = new Int16Array(bytes.buffer), out = new Float32Array(pcm.length);
-    for (let i = 0; i < pcm.length; i++) out[i] = pcm[i] / 32768;
-    return out;
-  }
-  const monoWav = (data) => S.encodeWav({ sampleRate: S.SR, left: data, right: data });
 
   // ---------- where the song lives ----------
   const API = { 'x-sunosux': '1' };
@@ -167,9 +167,9 @@
       live: false, path: null, sent: new Set(),
       load: () => safe(() => JSON.parse(localStorage.getItem(key)), null),
       saveSong: (song) => safe(() => localStorage.setItem(key, JSON.stringify(song))),
-      saveSample: (name, data) => safe(() => localStorage.setItem(key + ':sample:' + name, floatToB64(data))),
-      loadSample: (name) => safe(() => { const s = localStorage.getItem(key + ':sample:' + name); return s ? b64ToFloat(s) : null; }, null),
-      clear: () => safe(() => Object.keys(localStorage).filter((k) => k.startsWith(key)).forEach((k) => localStorage.removeItem(k))),
+      saveSample: (name, data) => idb('readwrite', (st) => st.put(data, key + ':' + name)).catch(() => toast('this browser could not keep that recording')),
+      loadSample: (name) => idb('readonly', (st) => st.get(key + ':' + name)).catch(() => null),
+      clear: () => { safe(() => localStorage.removeItem(key)); return idb('readwrite', (st) => st.delete(IDBKeyRange.bound(key + ':', key + ':\uffff'))).catch(() => null); },
     };
   }
 
@@ -244,6 +244,7 @@
         me.loop = !!opts.loop;
         me.connect(c.destination);
         offset = fromSec || 0; startAt = c.currentTime;
+        player.startedAt = startAt; // context time the audio began, for lining recordings up
         me.start(0, offset);
         source = me; current = audio;
         player.playing = true;
@@ -352,7 +353,7 @@
         rec.start();
         btn.classList.add('on'); btn.textContent = '🔴 listening… tap to stop';
         timer = setTimeout(stop, (maxSeconds || 8) * 1000);
-      } catch (e) { toast('🙈 the microphone is not allowed here'); }
+      } catch (e) { toast('🙈 The microphone is blocked in this window. Open this page in Chrome or Safari and allow the microphone.'); }
     });
     btn.useBlob = finish;
     return btn;
@@ -363,7 +364,7 @@
     const samples = into || {};
     for (const r of Object.values(song.instruments || {})) {
       if (!r.sample || samples[r.sample]) continue;
-      const stored = io.loadSample(r.sample);
+      const stored = await io.loadSample(r.sample);
       if (stored) { samples[r.sample] = stored; continue; }
       try {
         const res = await fetch(soundsUrl + r.sample + '.wav', { cache: 'no-store' });
@@ -426,7 +427,7 @@
     return app;
   };
 
-  Object.assign(Kit, { h, toast, busy, download, micButton, monoWav, floatToB64, EMOJI, COLORS, API,
+  Object.assign(Kit, { h, fill, toast, busy, download, micButton, monoWav, EMOJI, COLORS, API,
     helpers: { clone, safe, stepsPerBar, partSteps, instrumentsOf, isDrumRecipe, scaleNotes, laneEvents, eventsToLane, emptyLane, addHit, setBars } });
   root.Sunosux.Kit = Kit;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

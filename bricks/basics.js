@@ -28,7 +28,7 @@
     const { store, player } = app;
     const draw = (what) => {
       if (what === 'jam' || what === 'lane' || what === 'lyrics') return;
-      el.replaceChildren(h('h2', {}, '🧩 Song pieces'), h('div', { class: 'sx-cards' },
+      Kit.fill(el, h('h2', {}, '🧩 Song pieces'), h('div', { class: 'sx-cards' },
         Object.entries(store.song.parts).map(([name, p]) => h('div', { class: 'sx-card' + (store.selectedPart === name ? ' sel' : ''), style: { '--c': p.color || '#ff4fa3' } },
           h('button', { class: 'sx-card-face', onclick: () => { const looping = player.looping; store.select(name); if (!looping) player.playPart(name); } },
             h('span', { class: 'sx-emoji' }, p.emoji || '🎵'), h('span', {}, name)),
@@ -67,7 +67,7 @@
             h('button', { title: 'take out', onclick: () => store.change((s) => s.arrangement.splice(i, 1)) }, '✖'),
             h('button', { title: 'later', onclick: () => i < arr.length - 1 && move(i, 1) }, '▶')));
       });
-      el.replaceChildren(h('h2', {}, '🎶 Our song'),
+      Kit.fill(el, h('h2', {}, '🎶 Our song'),
         h('div', { class: 'sx-timeline' }, blocks.length ? blocks : h('div', { class: 'sx-small' }, 'Empty! Tap ➕ on a piece to put it in.')));
     };
     store.subscribe(draw); draw();
@@ -107,7 +107,7 @@
       } }, '📄 song file'),
       !io.live && h('button', { class: 'sx-btn', onclick: () => Object.values(store.song.instruments || {}).filter((r) => r.sample && store.samples[r.sample])
         .forEach((r) => Kit.download(new Blob([Kit.monoWav(store.samples[r.sample])], { type: 'audio/wav' }), r.sample + '.wav')) }, '🎙️ our recordings'),
-      !io.live && h('button', { class: 'sx-btn', onclick: () => { if (confirm('Go back to the starting song? Your changes will be gone.')) { io.clear(); location.reload(); } } }, '🔄 start over')),
+      !io.live && h('button', { class: 'sx-btn', onclick: () => { if (confirm('Go back to the starting song? Your changes will be gone.')) Promise.resolve(io.clear()).then(() => location.reload()); } }, '🔄 start over')),
       h('div', { class: 'sx-small' }, io.live ? '✅ Every change is saved in the repo as you go: ' + io.path : 'Changes are remembered in this browser. Download the song file to put it in the repo.'));
   };
 })();

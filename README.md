@@ -46,12 +46,24 @@ SUNOSUX_AGENT='your-agent-cli --non-interactive' npm run dev
 
 **Hunter Stage** (kids). The song plays as a show: every clap zaps a shadow into
 sparkles, every kick makes the singers bounce, the city lights come on as you go.
-Under it: the song as a row of blocks, the pieces as cards, big pads, a hum catcher
-that turns singing into a melody, a recorder that turns any sound into an instrument,
-and the wish star.
+Under it: the song as a row of blocks, the pieces as cards, a vocal booth, big pads,
+a hum catcher that turns singing into a melody, a recorder that turns any sound into
+an instrument, and the wish star.
 
 **Studio** (grown-ups). A step grid, the text lanes, instrument recipes as JSON, a
 sound lab, lyrics, and WAV export.
+
+### Singing
+
+Pick a piece, press 🎤, wait for the count of four, and sing along. The take is cut to
+start exactly where the piece starts and is added to that piece, so it plays wherever
+the piece is in the song. Sing again to layer a harmony or a duet. If a take sounds
+off the beat (Bluetooth headphones do this), slide it with ◀ earlier / later ▶; the
+next take remembers the correction.
+
+Recordings are saved to `sounds/` and are git-ignored, so voices stay on your computer
+unless you decide to add them. Use a normal browser tab: embedded preview panes
+usually block the microphone.
 
 Pages are made of bricks, so a new one is a few lines:
 

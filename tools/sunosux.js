@@ -45,7 +45,7 @@ function loadSamples(song) {
 function die(msg) { console.error('✖ ' + msg); process.exit(1); }
 
 // Everything that can be wrong with a song, as plain sentences.
-function checkSong(song) {
+function checkSong(song, warnings = []) {
   const errors = [], inst = Object.assign({}, global.SunosuxInstruments, song.instruments || {});
   if (!(song.bpm > 30 && song.bpm < 300)) errors.push('bpm should be a number between 30 and 300');
   if (!song.parts || !Object.keys(song.parts).length) errors.push('the song has no parts');
@@ -56,7 +56,7 @@ function checkSong(song) {
       const where = `part "${name}" lane ${i + 1} (${tr.instrument})`;
       const recipe = inst[tr.instrument];
       if (!recipe) return errors.push(`${where}: no instrument called "${tr.instrument}"`);
-      if (recipe.sample && !fs.existsSync(rel('sounds', recipe.sample + '.wav'))) errors.push(`${where}: recording sounds/${recipe.sample}.wav is missing`);
+      if (recipe.sample && !fs.existsSync(rel('sounds', recipe.sample + '.wav'))) warnings.push(`${where}: recording sounds/${recipe.sample}.wav is not on this computer, so it will be silent`);
       try {
         const lane = S.parseLane(tr.lane);
         lane.events.forEach((e) => (e.notes || []).forEach(S.noteToMidi));
@@ -92,7 +92,8 @@ runs that command for each wish (for example a coding agent CLI in non-interacti
     const names = rest.length ? rest : listSongs();
     let bad = 0;
     for (const n of names) {
-      const song = loadSong(n), errors = checkSong(song);
+      const warnings = [], song = loadSong(n), errors = checkSong(song, warnings);
+      [...new Set(warnings)].forEach((w) => console.log('⚠ ' + w));
       if (errors.length) { bad++; console.log(`✖ ${n}`); errors.forEach((e) => console.log('   ' + e)); }
       else {
         const tl = S.songTimeline(song), secs = tl.reduce((a, b) => a + b.duration, 0);

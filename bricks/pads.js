@@ -25,7 +25,7 @@
     const draw = (what) => {
       if (what === 'jam' || what === 'lane' || what === 'lyrics') return;
       const song = store.song, inst = H.instrumentsOf(song), part = song.parts[store.selectedPart];
-      const drums = Object.entries(inst).filter(([, r]) => H.isDrumRecipe(r));
+      const drums = Object.entries(inst).filter(([, r]) => H.isDrumRecipe(r) && !r.vocal); // sung takes are not pads
       const tunes = Object.entries(inst).filter(([, r]) => !H.isDrumRecipe(r));
       if (!inst[tune] || H.isDrumRecipe(inst[tune])) tune = (tunes[0] || [])[0];
       const notes = H.scaleNotes(song, 'A4', 'C6');
@@ -42,7 +42,7 @@
         if (on && store.selectedPart) player.loopPart(store.selectedPart);
         draw();
       } }, catching ? '⏹️ stop catching' : '🔴 catch my taps');
-      el.replaceChildren(
+      Kit.fill(el, 
         h('h2', {}, '🪄 Magic pads'),
         h('div', { class: 'sx-row' }, catchBtn, h('button', { class: 'sx-btn', onclick: () => store.undo() }, '↩️ oops'),
           h('span', { class: 'sx-small' }, catching && part ? 'Your taps go into ' + part.emoji + ' ' + store.selectedPart : 'Tap the pads! Press 🔴 to put your taps in a piece.')),

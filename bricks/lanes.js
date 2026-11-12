@@ -21,7 +21,7 @@
       if (what === 'lyrics') return;
       if ((what === 'lane' || what === 'jam') && el.contains(document.activeElement)) return; // do not yank the cursor while typing
       const song = store.song, name = store.selectedPart, part = song.parts[name], inst = H.instrumentsOf(song);
-      if (!part) return el.replaceChildren(h('h2', {}, '⌨️ Lanes'));
+      if (!part) return Kit.fill(el, h('h2', {}, '⌨️ Lanes'));
       if (!inst[recipeKey]) recipeKey = (part.tracks[0] || {}).instrument || Object.keys(inst)[0];
       const rows = part.tracks.map((tr, ti) => {
         const status = h('span', { class: 'sx-small' }, check(song, part, tr.lane));
@@ -47,7 +47,7 @@
         store.change((s) => { s.instruments = s.instruments || {}; s.instruments[key] = r; });
         player.trigger(r, 'C5');
       };
-      el.replaceChildren(
+      Kit.fill(el, 
         h('h2', {}, '⌨️ Lanes: ' + part.emoji + ' ' + name),
         h('div', { class: 'sx-small' }, 'drums: x hit, X loud, o soft, . rest   ·   tunes: A4 note, - hold, . rest, A3+C4+E4 chord   ·   "… *4" repeats   ·   16 steps a bar'),
         ...rows,

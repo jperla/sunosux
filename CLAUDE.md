@@ -33,7 +33,7 @@ make small edits rather than rewriting the whole file.
 | `src/engine.js` | Song data to audio. Pure JS DSP, same code in browser and Node. |
 | `src/instruments.js` | Built-in instrument recipes. |
 | `src/kit.js`, `src/kit.css` | The store, player, hot reload and look shared by every page. |
-| `bricks/*.js` | UI bricks: `stage`, `pads`, `timeline`, `parts`, `editor`, `lanes`, `hum`, `recorder`, `soundLab`, `lyrics`, `wish`, `playBar`, `saveBar`. |
+| `bricks/*.js` | UI bricks: `stage`, `sing`, `pads`, `timeline`, `parts`, `editor`, `lanes`, `hum`, `recorder`, `soundLab`, `lyrics`, `wish`, `playBar`, `saveBar`. |
 | `interfaces/<name>/index.html` | Pages. Each is a short list of bricks. |
 | `tools/sunosux.js` | CLI: `dev`, `check`, `render`, `sound`, `list`, `new-song`, `new-interface`, `wishes`, `test`. |
 
@@ -72,7 +72,8 @@ worth keeping forever in `src/instruments.js`.
 
 - Synth: `wave` (sine, square, saw, triangle), `voices`, `detune` (cents), `octave`, `env {a,d,s,r}`, `filter {cutoff,q,envAmount}`, `vibrato {rate,depth}`, `sub`, `noise`, `gain`, `pan`.
 - Drum: `kind` (kick, snare, clap, hat, tom, zap), `decay`, `pitch`, `gain`.
-- Recording: `sample` (file name in `sounds/` without `.wav`), `pitched` (true plays it at each note, false plays it as a hit), `root`.
+- Recording: `sample` (file name in `sounds/` without `.wav`), `pitched` (true plays it at each note, false plays it as a hit), `root`, `offset` (seconds later or earlier).
+- Sung take: a recording with `vocal: true`, made by the `sing` brick. It sits in a piece as a lane with one hit on step 0 (`X...`), so it plays from the start of that piece wherever the piece is used. Different words for a second verse means a copy of the piece (👯) with its own take. Never re-time, trim or delete a take unless asked: nudge it with `offset`, quiet it with the lane's `gain`.
 
 Hear one without opening the page: `node tools/sunosux.js sound <name>` writes `out/sound-<name>.wav`.
 New kinds of sound (a new drum `kind`, an effect) go in `src/engine.js`.
@@ -92,6 +93,7 @@ Sunosux.Kit.components.tigerButton = (el, app) => {
 - `store.song` is the song. Change it only through `store.change((song) => { … })`, which gives undo, autosave and redraw for free. `store.subscribe(fn)` redraws.
 - `player.play()`, `playPart(name)`, `loopPart(name)`, `trigger(recipe, note)`, `onHit(fn)` (every note as it sounds, for visuals), `onTick(fn)`.
 - `Kit.helpers` has `addHit`, `laneEvents`, `eventsToLane`, `scaleNotes`, `instrumentsOf`, `setBars`.
+- Redraw with `Kit.fill(el, ...children)`: it flattens arrays and skips `null`, which plain `replaceChildren` does not.
 
 A page is a list of bricks: `node tools/sunosux.js new-interface "Drum Party" --bricks stage,pads --kid`
 writes `interfaces/drum-party/index.html` and links it from the home page. When they
@@ -113,3 +115,4 @@ new page for it rather than bending an old one. Pages are cheap.
 - Keep `node tools/sunosux.js test` passing.
 - Original music only. Borrow a style or a mood (K-pop, lullaby, sea shanty), never the melody, lyrics, names or characters of an existing song or show.
 - The dev server only listens on this computer and only saves `songs/*.json` and `sounds/*.wav`. Keep it that way.
+- Recordings are real voices, one of them a child's. `sounds/*.wav` is git-ignored: never add, commit or upload recordings unless the grown-up asks for exactly that. A song whose recordings are missing still plays, with those lanes silent.

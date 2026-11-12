@@ -3,3 +3,5 @@ node_modules/
 *.tmp
 .DS_Store
 wishes/inbox.md
+# recordings of real voices stay on this computer unless you choose to add them
+sounds/*.wav

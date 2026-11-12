@@ -131,3 +131,11 @@ body.kid .sx-pads.tune { grid-template-columns: repeat(7, 1fr); }
   .sx-stage-play { width: 74px; height: 74px; font-size: 2.2rem; }
 }
 @media (min-width: 900px) { main.two { grid-template-columns: 1fr 1fr; } main.two > .wide { grid-column: 1 / -1; } }
+
+/* vocal booth */
+.sx-sing-count { font-size: 4.5rem; font-weight: 900; text-align: center; line-height: 1.1; color: var(--sx-gold); text-shadow: 0 0 24px var(--sx-gold); }
+.sx-sing-words { font-size: clamp(1.3rem, 4vw, 2.1rem); font-weight: 800; text-align: center; padding: 6px 4px 10px; }
+.sx-meter { height: 14px; border-radius: 8px; background: rgba(255, 255, 255, .12); overflow: hidden; margin: 8px 0; }
+.sx-meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #3ddc84, #ffd23f 70%, #ff4f4f); }
+.sx-meter.sx-progress i { background: var(--sx-accent); }
+.sx-take { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; border-radius: 14px; background: rgba(255, 255, 255, .07); margin-top: 8px; }

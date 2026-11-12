@@ -26,7 +26,7 @@
       Kit.toast(emoji + ' is an instrument now! Find it on the pads.');
       last = null; draw();
     };
-    const draw = () => el.replaceChildren(h('h2', {}, '🎙️ Our own sounds'), say,
+    const draw = () => Kit.fill(el, h('h2', {}, '🎙️ Our own sounds'), say,
       h('div', { class: 'sx-row' }, mic, h('label', { class: 'sx-btn' }, '📁 or pick a file', file)),
       last && h('div', { class: 'sx-row' },
         h('button', { class: 'sx-btn', onclick: () => player.playData(last) }, '👂 listen'),
@@ -59,7 +59,7 @@
       const tunes = Object.entries(inst).filter(([, r]) => !H.isDrumRecipe(r));
       if (!inst[singer]) singer = (tunes[0] || [])[0];
       if (!say.textContent || what === 'select') say.textContent = 'Sing "la la la" and ' + ((inst[singer] || {}).emoji || '🎤') + ' will play your tune in ' + (part ? part.emoji + ' ' + store.selectedPart : 'a piece') + '.';
-      el.replaceChildren(h('h2', {}, '🎶 Hum catcher'), say,
+      Kit.fill(el, h('h2', {}, '🎶 Hum catcher'), say,
         h('div', { class: 'sx-row' }, mic, h('button', { class: 'sx-btn', onclick: () => store.undo() }, '↩️'),
           h('span', { class: 'sx-small' }, 'who sings it?'),
           tunes.map(([k, r]) => h('button', { class: 'sx-btn' + (k === singer ? ' on' : ''), title: r.label || k, onclick: () => { singer = k; player.trigger(r, 'C5'); say.textContent = ''; draw(); } }, r.emoji || '🎵'))));
@@ -79,7 +79,7 @@
     });
     const group = (title, key, opts) => h('div', { class: 'sx-row' }, h('span', { class: 'sx-small sx-choice-name' }, title),
       opts.map(([v, lab]) => h('button', { class: 'sx-btn' + (pick[key] === v ? ' on' : ''), onclick: () => { pick[key] = v; draw(); player.trigger(recipe(), 'C5'); } }, lab)));
-    const draw = () => el.replaceChildren(h('h2', {}, '🧪 Sound Lab: invent an instrument'),
+    const draw = () => Kit.fill(el, h('h2', {}, '🧪 Sound Lab: invent an instrument'),
       group('sound', 'wave', [['sine', '🌊 smooth'], ['triangle', '🪈 flute'], ['square', '👾 video game'], ['saw', '🐝 buzzy']]),
       group('how many', 'crowd', [[1, '🧍 one'], [3, '👯 three'], [7, '🏟️ a crowd']]),
       group('how long', 'length', [['short', '🐜 plink'], ['medium', '🐕 note'], ['long', '🐋 looong']]),

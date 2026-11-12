@@ -172,7 +172,7 @@
 
   // ---------- recordings / samples ----------
   // A sample instrument recipe looks like:
-  //   { sample: 'giggle', root: 'C4', pitched: true, gain: 0.8, env: { a, d, s, r } }
+  //   { sample: 'giggle', root: 'C4', pitched: true, gain: 0.8, env: { a, d, s, r }, offset: 0 }
   // The audio itself lives in options.samples[name] = Float32Array at 44.1 kHz
   // (Node: tools load sounds/*.wav; browser: the recorder or file upload adds them).
   // pitched: false -> plays as-is like a drum hit. pitched: true -> plays at the note.
@@ -346,6 +346,7 @@
     const samples = options.samples || {};
     const cache = new Map();
     const hits = [];
+    const missing = new Set();
     const isDrum = (r) => !!(r.kind || (r.sample && !r.pitched));
     let seed = 7;
     for (const item of timeline) {
@@ -362,14 +363,18 @@
           hits.push({ t: item.start + ev.step * stepSec, inst: tr.instrument, drum: isDrum(recipe), kind: recipe.kind || null,
             midi: ev.notes ? noteToMidi(ev.notes[0]) : null, len: ev.len * stepSec, part: item.name });
           if (recipe.sample) {
+            // a recording that is not here (not recorded on this computer) is skipped, not fatal
             const data = samples[recipe.sample];
-            if (!data) throw new Error('missing recording: ' + recipe.sample + ' (put sounds/' + recipe.sample + '.wav in the repo or record it)');
+            if (!data) { missing.add(recipe.sample); continue; }
             const notes = recipe.pitched && ev.notes ? ev.notes : [null];
             for (const n of notes) {
               const hold = ev.len * stepSec;
               const key = tr.instrument + '|' + n + '|' + ev.len + '|' + ev.vel;
               if (!cache.has(key)) cache.set(key, renderSampleVoice(recipe, data, n ? noteToFreq(n) : 0, hold, ev.vel));
-              mixInto(L, R, cache.get(key), start, pan, gain);
+              // recipe.offset (seconds) slides a recording later (+) or earlier (-), to line a sung take up with the band
+              let at = start + Math.round((recipe.offset || 0) * SR), sound = cache.get(key);
+              if (at < 0) { sound = sound.subarray(Math.min(sound.length, -at)); at = 0; }
+              mixInto(L, R, sound, at, pan, gain);
             }
           } else if (recipe.kind) {
             const key = tr.instrument + '|' + ev.vel;
@@ -404,7 +409,7 @@
     const norm = peak > 0 ? 0.89 / peak : 1;
     for (let i = 0; i < L.length; i++) { L[i] *= norm; R[i] *= norm; }
     hits.sort((a, b) => a.t - b.t);
-    return { sampleRate: SR, left: L, right: R, timeline, hits, duration: L.length / SR };
+    return { sampleRate: SR, left: L, right: R, timeline, hits, duration: L.length / SR, missing: [...missing] };
   }
 
   // Render one recipe on its own (for the Sound Lab "try it" button).
@@ -494,20 +499,21 @@
   }
 
   // ---------- WAV ----------
+  // audio.right is optional: leave it out for a mono file (recordings)
   function encodeWav(audio) {
-    const n = audio.left.length;
-    const buf = new ArrayBuffer(44 + n * 4);
+    const ch = audio.right ? 2 : 1, n = audio.left.length, bytes = n * ch * 2;
+    const buf = new ArrayBuffer(44 + bytes);
     const dv = new DataView(buf);
     const str = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
-    str(0, 'RIFF'); dv.setUint32(4, 36 + n * 4, true); str(8, 'WAVE');
-    str(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true);
-    dv.setUint32(24, audio.sampleRate, true); dv.setUint32(28, audio.sampleRate * 4, true);
-    dv.setUint16(32, 4, true); dv.setUint16(34, 16, true);
-    str(36, 'data'); dv.setUint32(40, n * 4, true);
+    str(0, 'RIFF'); dv.setUint32(4, 36 + bytes, true); str(8, 'WAVE');
+    str(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, ch, true);
+    dv.setUint32(24, audio.sampleRate, true); dv.setUint32(28, audio.sampleRate * ch * 2, true);
+    dv.setUint16(32, ch * 2, true); dv.setUint16(34, 16, true);
+    str(36, 'data'); dv.setUint32(40, bytes, true);
     let o = 44;
     for (let i = 0; i < n; i++) {
       dv.setInt16(o, Math.max(-1, Math.min(1, audio.left[i])) * 32767, true); o += 2;
-      dv.setInt16(o, Math.max(-1, Math.min(1, audio.right[i])) * 32767, true); o += 2;
+      if (ch === 2) { dv.setInt16(o, Math.max(-1, Math.min(1, audio.right[i])) * 32767, true); o += 2; }
     }
     return buf;
   }

@@ -11,7 +11,7 @@
     const draw = (what) => {
       if (what === 'lyrics') return;
       const song = store.song, name = store.selectedPart, part = song.parts[name];
-      if (!part) return el.replaceChildren(h('h2', {}, '✏️ Pick a piece to change it'));
+      if (!part) return Kit.fill(el, h('h2', {}, '✏️ Pick a piece to change it'));
       const spb = H.stepsPerBar(song), bars = part.bars || 1, steps = bars * spb, inst = H.instrumentsOf(song);
       if (bar >= bars) bar = 0;
       const cols = Array.from({ length: spb }, (_, k) => bar * spb + k);
@@ -42,6 +42,7 @@
           h('button', { class: 'sx-btn tiny', title: 'quieter', onclick: () => vol(-0.2) }, '🔉'),
           h('button', { class: 'sx-btn tiny', title: 'louder', onclick: () => vol(0.2) }, '🔊'),
           h('button', { class: 'sx-btn tiny', title: 'take out', onclick: () => store.change((s) => s.parts[name].tracks.splice(ti, 1)) }, '✖'));
+        if (recipe.vocal) return h('div', { class: 'sx-track' }, label, h('div', { class: 'sx-small' }, '🎙️ a sung take: it plays from the start of this piece (change it in "Sing a piece")'));
         if (drum) {
           return h('div', { class: 'sx-track' }, label, h('div', { class: 'sx-grid', style: { '--n': spb } }, cols.map((st) => {
             const on = events.find((e) => e.step === st);
@@ -75,8 +76,8 @@
       const picker = h('select', { class: 'sx-select', onchange: (e) => {
         const key = e.target.value;
         if (key) store.change((s) => s.parts[name].tracks.push({ instrument: key, lane: H.emptyLane(inst[key], steps) }));
-      } }, h('option', { value: '' }, '➕ add an instrument…'), Object.entries(inst).map(([k, r]) => h('option', { value: k }, (r.emoji || '🎵') + ' ' + (r.label || k))));
-      el.replaceChildren(h('h2', {}, '✏️ Change a piece'), head, ...rows, picker);
+      } }, h('option', { value: '' }, '➕ add an instrument…'), Object.entries(inst).filter(([, r]) => !r.vocal).map(([k, r]) => h('option', { value: k }, (r.emoji || '🎵') + ' ' + (r.label || k))));
+      Kit.fill(el, h('h2', {}, '✏️ Change a piece'), head, ...rows, picker);
     };
     store.subscribe(draw); draw();
   };
