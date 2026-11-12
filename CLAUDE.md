@@ -82,6 +82,7 @@ The draft is deliberately plain. Building the real song around it is your job, w
 - Never change `bpm` or `tuning` of a seeded song: the recording cannot stretch, so it would fall out of time or out of tune. Change the feel with the drum pattern (half-time, double-time hats) instead.
 - Listen before you write. `node tools/listen.js <song-or-wav> --bars N` prints every sung note (time, length, pitch, cents off), the phrases, the tuning, key guesses, whether the singing is on a beat at all, and a bar-by-bar table of what was sung against the chords that hold it.
 - A small child sings in free time and between the notes. Do not trust a chord loop the seed guessed, and do not stretch the voice. `tools/tidy.js` moves whole phrases onto strong beats instead (`phrasesIn`, `layout`, `retime`), writes her tune out as a lane (`notesToLane`), and sets the level by how loud the singing is rather than its loudest squeak (`level`). Check afterwards that the voice sits about 8 dB or more over the band between 300 Hz and 3 kHz (`voiceBand`, and `render(song, { master: false })` gives the raw mix to measure).
+- When the singing wanders between the notes, a chord loop fights it. Hold a drone (root and fifth) and let one inner voice move to whatever she is mostly singing in each bar: it claims less, so it clashes less, and the harmony is literally hers. Small percussion (click, rim, shaker, glitch) in uneven patterns leaves room for free-time phrasing where a four-on-the-floor kick does not.
 - Score chord choices against what was actually sung in each bar, say how much they hold, and prefer a progression written for the part over a four-chord loop when it holds clearly more.
 - Another bit of the same take can become another part: `node tools/sunosux.js seed sounds/<id>-full.wav --start 12 --end 19 --title scratch`, then move that hook lane and instrument into the song.
 
@@ -90,9 +91,10 @@ The draft is deliberately plain. Building the real song around it is your job, w
 A recipe is plain data. Put song-specific ones in the song's `instruments`; put ones
 worth keeping forever in `src/instruments.js`.
 
-- Synth: `wave` (sine, square, saw, triangle), `voices`, `detune` (cents), `octave`, `env {a,d,s,r}`, `filter {cutoff,q,envAmount}`, `vibrato {rate,depth}`, `sub`, `noise`, `gain`, `pan`.
-- Drum: `kind` (kick, snare, clap, hat, tom, zap), `decay`, `pitch`, `gain`.
+- Synth: `wave` (sine, square, saw, triangle), `voices`, `detune` (cents), `stack` (exact pitches in cents above the note, e.g. `[0, 1200]` for a bell), `octave`, `env {a,d,s,r}`, `filter {cutoff,q,envAmount}`, `vibrato {rate,depth}`, `sub`, `noise`, `drive` (grit), `gain`, `pan`.
+- Drum: `kind` (kick, snare, clap, hat, tom, zap, and the small ones: click, rim, shaker, glitch), `decay`, `pitch`, `drive`, `crush`, `gain`.
 - Recording: `sample` (file name in `sounds/` without `.wav`), `pitched` (true plays it at each note, false plays it as a hit), `root`, `offset` (seconds later or earlier).
+- A voice as an instrument: a `pitched` recording with `rootHz` (its exact pitch, which is never right on a note) and `grain: { from, to, size }`, which freezes a steady stretch into a sound that holds for any length. Find the steadiest held note with `tools/listen.js`, cut it out, and the singer can play chords with her own voice.
 - Sung take: a recording with `vocal: true`, made by the `sing` brick. It sits in a piece as a lane with one hit on step 0 (`X...`), so it plays from the start of that piece wherever the piece is used. Different words for a second verse means a copy of the piece (👯) with its own take. Never re-time, trim or delete a take unless asked: nudge it with `offset`, quiet it with the lane's `gain`.
 
 Hear one without opening the page: `node tools/sunosux.js sound <name>` writes `out/sound-<name>.wav`.

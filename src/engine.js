@@ -76,6 +76,7 @@
   //
   //   wave:    'sine' | 'square' | 'saw' | 'triangle'
   //   voices:  number of detuned copies (chorus/supersaw shimmer)
+  //   stack:   instead of voices: exact pitches in cents above the note, e.g. [0, 1200] for a bell
   //   detune:  cents between copies
   //   octave:  shift the note up (+1) or down (-1)
   //   env:     { a, d, s, r } seconds and sustain level
@@ -84,11 +85,15 @@
   //   noise:   0..1 amount of hiss mixed in
   //   sub:     0..1 sine an octave down (fat bass)
   //   gain:    volume
+  //   drive:   grit (soft clipping), 1 = a little, 4 = a lot
   function renderTone(recipe, freq, holdTime, velocity, seed) {
     const env = recipe.env || {};
     const len = Math.ceil((holdTime + (env.r ?? 0.1)) * SR) + 1;
     const out = new Float32Array(len);
-    const voices = Math.max(1, recipe.voices || 1);
+    // stack: [0, 1200] plays every note as several pitches at once, each so many cents above the note
+    // (0 and 1200 = the note and its octave: a bell). Without it, `voices` copies spread `detune` cents around the note.
+    const stack = recipe.stack || null;
+    const voices = stack ? stack.length : Math.max(1, recipe.voices || 1);
     const detune = recipe.detune || 0;
     const f0 = freq * Math.pow(2, recipe.octave || 0);
     const vib = recipe.vibrato || { rate: 0, depth: 0 };
@@ -104,7 +109,7 @@
       const vibAmt = vib.depth ? Math.sin(TAU * vib.rate * t) * vib.depth * Math.min(1, t / 0.25) : 0;
       let x = 0;
       for (let v = 0; v < voices; v++) {
-        const cents = voices === 1 ? 0 : (v / (voices - 1) - 0.5) * detune;
+        const cents = stack ? stack[v] : voices === 1 ? 0 : (v / (voices - 1) - 0.5) * detune;
         const f = f0 * Math.pow(2, (cents / 100 + vibAmt) / 12);
         phases[v] += f / SR;
         x += osc(recipe.wave, phases[v]);
@@ -119,12 +124,14 @@
         const open = 1 + (filt.envAmount || 0) * Math.exp(-t * 12);
         x = lp(x, filt.cutoff * open, filt.q);
       }
-      out[i] = x * e * gain;
+      // drive: push the sound into a soft clip for grit (1 = a little, 4 = a lot)
+      out[i] = recipe.drive ? Math.tanh(x * e / Math.sqrt(voices) * recipe.drive) * (recipe.gain ?? 0.3) * velocity : x * e * gain;
     }
     return out;
   }
 
-  // Drum recipes: kind is 'kick' | 'snare' | 'clap' | 'hat' | 'tom' | 'zap'.
+  // Drum recipes: kind is 'kick' | 'snare' | 'clap' | 'hat' | 'tom' | 'zap' | 'click' | 'rim' | 'shaker' | 'glitch'.
+  // Any drum can take drive (grit) and crush (hold every Nth sample, for a crunchy low-fi sound).
   function renderDrum(recipe, velocity, seed) {
     const rand = rng(seed);
     const kind = recipe.kind;
@@ -134,7 +141,7 @@
     const g = (recipe.gain ?? 0.8) * velocity;
     let phase = 0;
     const lp = makeFilter();
-    let prev = 0;
+    let prev = 0, held = 0;
     for (let i = 0; i < len; i++) {
       const t = i / SR;
       let x = 0;
@@ -164,7 +171,23 @@
         const f = 2000 * Math.exp(-t * 18) + 100;
         phase += f / SR;
         x = osc('square', phase) * Math.exp(-t / (decay * 0.4)) * 0.4;
+      } else if (kind === 'click') { // a tiny tick, like a twig snapping
+        const n = rand();
+        const hp = n - prev; prev = n;
+        x = hp * Math.exp(-t / 0.004) * 0.9;
+      } else if (kind === 'rim') { // a woody knock
+        phase += (recipe.pitch ?? 820) / SR;
+        x = (Math.sin(TAU * phase) + 0.5 * Math.sin(TAU * phase * 1.51)) * Math.exp(-t / 0.018) * 0.7;
+      } else if (kind === 'shaker') { // a soft sandy swish
+        const n = rand();
+        const hp = n - prev; prev = n;
+        x = hp * Math.min(1, t / 0.012) * Math.exp(-t / (decay * 0.3)) * 0.5;
+      } else if (kind === 'glitch') { // a little digital hiccup
+        phase += (recipe.pitch ?? 1400) * (1 + 0.5 * Math.sin(t * 900)) / SR;
+        x = osc('square', phase) * (Math.floor(t * 180) % 2 ? 0.2 : 1) * Math.exp(-t / (decay * 0.25)) * 0.35;
       }
+      if (recipe.drive) x = Math.tanh(x * recipe.drive) / Math.tanh(recipe.drive);
+      if (recipe.crush) { if (i % recipe.crush === 0) held = x; x = held; }
       out[i] = x * g;
     }
     return out;
@@ -173,12 +196,34 @@
   // ---------- recordings / samples ----------
   // A sample instrument recipe looks like:
   //   { sample: 'giggle', root: 'C4', pitched: true, gain: 0.8, env: { a, d, s, r }, offset: 0 }
+  //   add rootHz for a recording that is between notes, and grain: { from, to, size } to hold it as a pad
   // The audio itself lives in options.samples[name] = Float32Array at 44.1 kHz
   // (Node: tools load sounds/*.wav; browser: the recorder or file upload adds them).
   // pitched: false -> plays as-is like a drum hit. pitched: true -> plays at the note.
   function renderSampleVoice(recipe, data, freq, holdTime, velocity) {
-    const ratio = recipe.pitched ? freq / noteToFreq(recipe.root || 'C4') : 1;
+    // rootHz: the exact pitch of the recording, when it is not right on a note (a sung note never is)
+    const ratio = recipe.pitched ? freq / (recipe.rootHz || noteToFreq(recipe.root || 'C4')) : 1;
     const env = recipe.env || { a: 0.002, d: 0, s: 1, r: 0.05 };
+    if (recipe.grain) {
+      // grain: { from, to, size } freezes a stretch of the recording into a sound that can be held
+      // for as long as you like: many short overlapping slices taken from between from and to (seconds).
+      const gr = recipe.grain, size = Math.round((gr.size || 0.12) * SR), hop = Math.max(1, Math.round(size / 4));
+      const from = Math.round((gr.from || 0) * SR), to = Math.min(data.length - 2, Math.round((gr.to ?? data.length / SR) * SR));
+      const span = Math.max(1, to - from - Math.ceil(size * ratio));
+      const total = Math.ceil((holdTime + (env.r ?? 0.05)) * SR), sum = new Float32Array(total), rand = rng(Math.round(freq * 100) + 17);
+      for (let start = -size; start < total; start += hop) {
+        const src = from + Math.floor((rand() + 1) / 2 * span);
+        for (let k = 0; k < size; k++) {
+          const o = start + k;
+          if (o < 0 || o >= total) continue;
+          const pos = src + k * ratio, j = Math.floor(pos), f = pos - j;
+          sum[o] += ((data[j] || 0) * (1 - f) + (data[j + 1] || 0) * f) * (0.5 - 0.5 * Math.cos(TAU * k / size));
+        }
+      }
+      const gg = (recipe.gain ?? 0.8) * velocity * 0.5; // four overlapping slices add up to 2
+      for (let i = 0; i < total; i++) sum[i] *= adsr(i / SR, holdTime, env) * gg;
+      return sum;
+    }
     const playTime = recipe.pitched || recipe.cut ? holdTime : data.length / SR / ratio;
     const len = Math.min(Math.ceil((playTime + (env.r ?? 0.05)) * SR), Math.floor(data.length / ratio));
     const out = new Float32Array(Math.max(1, len));
