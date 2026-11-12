@@ -400,6 +400,8 @@
       for (let i = n; i < L.length; i++) { L[(i - n) % n] += L[i]; R[(i - n) % n] += R[i]; }
       L = L.slice(0, n); R = R.slice(0, n);
     }
+    // options.master === false leaves the raw mix alone (for measuring how loud things are against each other)
+    if (options.master === false) { hits.sort((a, b) => a.t - b.t); return { sampleRate: SR, left: L, right: R, timeline, hits, duration: L.length / SR, missing: [...missing] }; }
     // master: gentle soft clip, then normalise to -1 dB
     let peak = 0;
     for (let i = 0; i < L.length; i++) {

@@ -80,6 +80,9 @@ The draft is deliberately plain. Building the real song around it is your job, w
 - Write new parts that answer the hook: a verse tune from the same scale that leaves room and moves less than the hook, a pre-chorus that climbs into it, a bridge on other chords of the key. Reuse a fragment of `seed.melody` somewhere so the song sounds like one idea.
 - The detected chords are a guess from the sung notes. If a bar sounds wrong, a neighbouring chord of the key that contains the bar's long notes usually fixes it.
 - Never change `bpm` or `tuning` of a seeded song: the recording cannot stretch, so it would fall out of time or out of tune. Change the feel with the drum pattern (half-time, double-time hats) instead.
+- Listen before you write. `node tools/listen.js <song-or-wav> --bars N` prints every sung note (time, length, pitch, cents off), the phrases, the tuning, key guesses, whether the singing is on a beat at all, and a bar-by-bar table of what was sung against the chords that hold it.
+- A small child sings in free time and between the notes. Do not trust a chord loop the seed guessed, and do not stretch the voice. `tools/tidy.js` moves whole phrases onto strong beats instead (`phrasesIn`, `layout`, `retime`), writes her tune out as a lane (`notesToLane`), and sets the level by how loud the singing is rather than its loudest squeak (`level`). Check afterwards that the voice sits about 8 dB or more over the band between 300 Hz and 3 kHz (`voiceBand`, and `render(song, { master: false })` gives the raw mix to measure).
+- Score chord choices against what was actually sung in each bar, say how much they hold, and prefer a progression written for the part over a four-chord loop when it holds clearly more.
 - Another bit of the same take can become another part: `node tools/sunosux.js seed sounds/<id>-full.wav --start 12 --end 19 --title scratch`, then move that hook lane and instrument into the song.
 
 ## Instruments

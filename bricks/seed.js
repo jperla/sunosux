@@ -11,7 +11,7 @@
 
   Kit.components.seed = (el, app) => {
     const { player } = app;
-    let data = null, a = 0, b = 0, bars = null, drag = null, heard = '', hearing = null;
+    let data = null, a = 0, b = 0, bars = null, drag = null, heard = '', hearing = null, kept = null;
     const say = h('div', { class: 'sx-small' }, 'Sing a little bit of a song, any way you like. No music, no counting. Then we build the song around it.');
     const title = h('input', { class: 'sx-text', placeholder: 'the name of our song' });
     const lyrics = h('textarea', { class: 'sx-text', rows: 3, placeholder: 'the words you sang…' });
@@ -40,8 +40,15 @@
 
     function use(d) {
       player.stop();
-      data = d; bars = null;
+      data = d; bars = null; kept = null;
       a = 0; b = dur() <= 20 ? dur() : 10; // a long take starts with its first ten seconds picked
+      // keep the take on disk straight away, so a refresh or a closed tab cannot lose it
+      if (app.live) {
+        const name = 'seed-' + Date.now().toString(36);
+        fetch('/api/file?path=sounds/' + name + '.wav', { method: 'PUT', headers: Kit.API, body: Kit.monoWav(d) })
+          .then((r) => { if (r.ok) { kept = name; say.textContent = '✅ Your singing is saved (sounds/' + name + '.wav). Now pick the best bit.'; } })
+          .catch(() => {});
+      }
       if (heard && !lyrics.dataset.typed) lyrics.value = heard;
       draw();
     }
@@ -99,8 +106,10 @@
         const analysis = await Kit.busy(() => Seed.analyze(raw, { bars: bars || undefined }));
         const voice = raw.slice();
         S.polishVoice(voice);
-        const song = Seed.build(analysis, { title: name, lyrics: lyrics.value.trim(), sample: id + '-hook', recording: id + '-full', from: +a.toFixed(3), to: +b.toFixed(3) });
-        await Kit.saveNewSong(app, id, song, { [id + '-hook']: voice, [id + '-full']: data });
+        const full = kept || id + '-full', files = { [id + '-hook']: voice };
+        if (!kept) files[full] = data;
+        const song = Seed.build(analysis, { title: name, lyrics: lyrics.value.trim(), sample: id + '-hook', recording: full, from: +a.toFixed(3), to: +b.toFixed(3) });
+        await Kit.saveNewSong(app, id, song, files);
         location.href = '../stage/?song=' + id;
       } catch (e) { Kit.toast('🙈 ' + e.message); }
     }
